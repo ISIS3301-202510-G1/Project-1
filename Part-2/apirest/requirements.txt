@@ -5,4 +5,4 @@ contractions
 nltk
 num2words
 spacy
-sklearn
+scikit-learn
