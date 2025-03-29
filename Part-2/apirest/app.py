@@ -15,6 +15,10 @@ import joblib
 import spacy
 import joblib
 from sklearn.metrics import precision_score, recall_score, f1_score
+import os
+import pickle
+import pandas as pd
+from sklearn.model_selection import train_test_split
 
 
 
@@ -55,7 +59,7 @@ async def predecirValores(items:List[Item]):
         pipeline = joblib.load("modelo_fake_news.pkl")
         resultado=predecir_noticias(items,pipeline)
         return resultado
-    except:
+    except:        
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Datos incorrectos")
         
 
@@ -153,30 +157,70 @@ async def predecirValores(items:List[ItemTrain]):
 def reentrenar_modelo(nuevos_datos):
     """
     nuevos_datos: lista de dicts con 'titulo', 'descripcion' y 'label'
-    Devuelve: metricas del nuevo modelo
+    Devuelve: métricas del nuevo modelo
     """
     pipeline = joblib.load("modelo_fake_news.pkl")
     vectorizer = pipeline.named_steps['vectorizer']
     classifier = pipeline.named_steps['classifier']
 
-    textos = [
-        clean_and_prepare_texts(n.titulo, n.descripcion)
-        for n in nuevos_datos
-    ]
-    etiquetas = [n.label for n in nuevos_datos]
+    datasetDf = load_dataset("dataset")  # Cargar dataset existente
 
-    X_new = vectorizer.transform(textos)
-    classifier.partial_fit(X_new, etiquetas)
+
+    nuevos_textos = [clean_and_prepare_texts(n.titulo, n.descripcion) for n in nuevos_datos]
+    nuevas_etiquetas = [n.label for n in nuevos_datos]
+
+
+    df_nuevos = pd.DataFrame({"texto_combinado": nuevos_textos, "Label": nuevas_etiquetas})
+    df_total = pd.concat([datasetDf, df_nuevos], ignore_index=True)
+
+
+    X_total = vectorizer.fit_transform(df_total["texto_combinado"])
+    y_total = df_total["Label"]
+
+
+    X_train, X_test, y_train, y_test = train_test_split(X_total, y_total, test_size=0.3, random_state=42)
+
+
+    classifier.fit(X_train, y_train)
+
+    y_pred = classifier.predict(X_test)
+    precision = round(precision_score(y_test, y_pred), 4)
+    recall = round(recall_score(y_test, y_pred), 4)
+    f1 = round(f1_score(y_test, y_pred), 4)
 
     joblib.dump(pipeline, "modelo_fake_news.pkl")
 
-    y_pred = classifier.predict(X_new)
     return {
-        "mag": "El modelo se reentreno correctamente",
-        "precision": round(precision_score(etiquetas, y_pred), 4),
-        "recall": round(recall_score(etiquetas, y_pred), 4),
-        "f1_score": round(f1_score(etiquetas, y_pred), 4),
-        "samples_used": len(etiquetas)
+        "msg": "El modelo se reentrenó correctamente",
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1,
+        "samples_used": len(y_train)
     }
+
+def save_dataset(dataset, name):
+    # Ensure the directory for datasets exists
+    directory = "datasets"
+    os.makedirs(directory, exist_ok=True)
+
+    # Save your dataset file within datasets directory
+    file_path = os.path.join(directory, f"{name}.bin")
+    with open(file_path, "wb") as stream:
+        pickle.dump(dataset, stream)
+
+
+def load_dataset(name):
+    # Load dataset file from datasets directory
+    filename = os.path.join("datasets", f"{name}.bin")
+    if not os.path.exists(filename):
+        raise FileNotFoundError(f"No dataset file found at {filename}")
+
+    with open(filename, "rb") as stream:
+        dataset = pickle.load(stream)
+    return dataset
+
+
+
+
 
 
