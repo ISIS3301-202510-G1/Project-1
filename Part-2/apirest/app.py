@@ -26,7 +26,7 @@ nlp = spacy.load("es_core_news_md")
 app=FastAPI()
 # Descargar recursos necesarios
 nltk.download('stopwords')
-nltk.download('punkt')
+nltk.download('punkt_tab')
 nltk.download('wordnet')
 
 # Inicializar herramientas de NLP
@@ -55,7 +55,8 @@ async def predecirValores(items:List[Item]):
         pipeline = joblib.load("modelo_fake_news.pkl")
         resultado=predecir_noticias(items,pipeline)
         return resultado
-    except:
+    except NameError as e:
+        print(e)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Datos incorrectos")
         
 
